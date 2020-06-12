@@ -164,14 +164,12 @@ with active_session():
 
 print('Training complete!')
 
-
-
-'''
 # Assumes training is complete and model is ready for inference
 checkpoint = {'classifier': classifier_struct,
               'class_to_idx': image_datasets['training'].class_to_idx,
               'model_state_dict': model.state_dict(),
+              'pretrained_type': 'vgg19'
              }
 
 torch.save(checkpoint, 'checkpoint.pth')
-'''
+
