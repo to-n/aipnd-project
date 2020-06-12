@@ -1,6 +1,14 @@
 import argparse
 from PIL import Image
 
+import torch
+from torch import nn
+from torchvision import models
+
+import numpy as np
+from pathlib import Path
+from workspace_utils import active_session
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument('image_path', action="store")
@@ -52,7 +60,7 @@ def process_image(image):
     np_image = np_image.transpose(2, 0, 1)
     return np_image
 
-model = load_checkpoint(checkpoint_path)
+
 
 def predict(image_path, model, topk=5):
     '''Predict the class (or classes) of an image using a trained deep learning model.
@@ -100,5 +108,10 @@ def load_checkpoint(filepath):
     model.load_state_dict(checkpoint['model_state_dict'])
 
     return model
-    
-probs, classes, img_tensor, label_class = predict(image_path, model, top_k)
+
+model = load_checkpoint(args.checkpoint_path)
+probs, classes, img_tensor, label_class = predict(args.image_path, model, args.top_k)
+
+print(label_class)
+print(probs)
+print(classes)
