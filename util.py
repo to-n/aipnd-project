@@ -3,6 +3,14 @@ import numpy as np
 
 import json
 
+MEAN_NORM_IMAGENET = [0.485, 0.456, 0.406]
+STD_NORM_IMAGENET = [0.229, 0.224, 0.225]
+TARGET_IMAGE_SIZE = 255
+CENTER_CROP_SIZE = 224
+
+QTY_VGG19_INPUT_UNITS = 25088
+QTY_CATEGORIES = 102
+
 def load_class_name_map(map_path):
     '''Load JSON mappping of classes to names
         '''
