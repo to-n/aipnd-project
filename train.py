@@ -10,10 +10,7 @@ from workspace_utils import active_session
 
 from pathlib import Path
 
-import json
 
-with open('cat_to_name.json', 'r') as f:
-    cat_to_name = json.load(f)
 
 
 # Load the data
