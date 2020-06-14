@@ -10,17 +10,23 @@ from workspace_utils import active_session
 
 def load_checkpoint(filepath):
     checkpoint = torch.load(filepath)
-    model = models.vgg19(pretrained=True) if checkpoint['pretrained_type'] == 'vgg19' else None
+    if checkpoint['pretrained_type'] == 'vgg11':
+        model = models.vgg11(pretrained=True)
+    elif checkpoint['pretrained_type'] == 'vgg19':
+        model = models.vgg19(pretrained=True)
+    else:
+        model = None
     model.class_to_idx = checkpoint['class_to_idx']
     model.classifier = nn.Sequential(checkpoint['classifier'])
     model.load_state_dict(checkpoint['model_state_dict'])
 
+    print(f"Loaded model with arch {checkpoint['pretrained_type']}")
     return model
 
 def predict(image_path, model, topk=5, device='cpu'):
     '''Predict the class (or classes) of an image using a trained deep learning model.
     '''
-    print(f'Inferring using {device}...')
+    print(f"Inferring using '{device}'...")
     model.to(device)
 
     # Retrieve file and covert to tensor
@@ -55,13 +61,18 @@ def predict(image_path, model, topk=5, device='cpu'):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('image_path', action="store")
-    parser.add_argument('checkpoint_path', action="store")
+    parser.add_argument('image_path', action="store", 
+                        help='Path to image file to be inferred by trained model')
+    parser.add_argument('checkpoint_path', action="store", 
+                        help='Path of checkpoint file for trained model')
     parser.add_argument('--top_k', action="store",
-                        type=int, default='1')
+                        type=int, default='1', 
+                        help='Number of top k class results to be displayed, per probability')
     parser.add_argument('--category_names', action="store",
-                        dest="category_names")
-    parser.add_argument('--gpu', action="store_true",
+                        dest="category_names", 
+                        help='Mapping of classes (categories) to actual names for displaying results')
+    parser.add_argument('--gpu', action="store_true", 
+                        help='Use GPU for inference if available. If false or GPU is not available, CPU will be used.',
                         default=False)
 
     args = parser.parse_args()

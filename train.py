@@ -1,4 +1,6 @@
 # Imports here
+import os
+import argparse
 import util
 import torch
 from torch import nn, optim
@@ -11,9 +13,9 @@ from workspace_utils import active_session
 
 from pathlib import Path
 
-def load_data():
+def load_data(data_directory):
     # Load the data
-    data_dir = 'flowers'
+    data_dir = data_directory
     train_dir = data_dir + '/train'
     valid_dir = data_dir + '/valid'
     test_dir = data_dir + '/test'
@@ -72,9 +74,25 @@ def load_data():
     return image_datasets, dataloaders
 
 
-def build_model():
+def build_model(arch, learning_rate, hidden_units, dropout_rate):
     # BUILD
-    model = models.vgg19(pretrained=True)
+
+    if arch == 'vgg19':
+        model = models.vgg19(pretrained=True)
+        print('Architecture: VGG19')
+        input_units = util.QTY_VGG19_INPUT_UNITS
+        hidden_0_units = util.QTY_VGG19_HIDDEN_0_UNITS
+    elif arch == 'vgg11':
+        model = models.vgg11(pretrained=True)
+        print('Architecture: VGG11')
+        input_units = util.QTY_VGG11_INPUT_UNITS
+        hidden_0_units = util.QTY_VGG11_HIDDEN_0_UNITS
+    else:
+        arch = 'vgg19'
+        model = models.vgg19(pretrained=True)
+        print('Architecture: defaulted to VGG19')
+        input_units = util.QTY_VGG19_INPUT_UNITS
+        hidden_0_units = util.QTY_VGG19_HIDDEN_0_UNITS
 
     # Freeze features
     for param in model.parameters():
@@ -82,35 +100,34 @@ def build_model():
 
     from collections import OrderedDict
     classifier_struct = OrderedDict([
-        ('fc1', nn.Linear(util.QTY_VGG19_INPUT_UNITS, 4096)),
+        ('lin1', nn.Linear(input_units, hidden_0_units)),
         ('relu1', nn.ReLU()),
-        ('dropout1', nn.Dropout(0.2)),
-        ('fc2', nn.Linear(4096, 1024)),
+        ('dropout1', nn.Dropout(dropout_rate)),
+        ('lin2', nn.Linear(hidden_0_units, hidden_units)),
         ('relu2', nn.ReLU()),
-        ('dropout2', nn.Dropout(0.2)),
-        ('fc3', nn.Linear(1024, util.QTY_CATEGORIES)),
+        ('dropout2', nn.Dropout(dropout_rate)),
+        ('lin3', nn.Linear(hidden_units, util.QTY_CATEGORIES)),
         ('output', nn.LogSoftmax(dim=1))
     ])
-
+    print(f'{hidden_units} hidden units')
     classifier = nn.Sequential(classifier_struct)
 
     model.classifier = classifier
 
     criterion = nn.NLLLoss()
 
-    optimizer = optim.Adam(model.classifier.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
     
-    return model, criterion, optimizer, classifier_struct
+    return model, criterion, optimizer, classifier_struct, arch
 
-def train(device, model, criterion, optimizer, dataloaders):
+def train(device, epochs, model, criterion, optimizer, dataloaders):
     # TRAIN
-    epochs = 2
     steps = 0
     running_loss = 0
     running_loss_steps = 0
     print_every = 50
     model.to(device)
-    print(f"Beginning training with {len(dataloaders['training'])} images and {epochs} epochs\n")
+    print(f"Beginning training with {len(dataloaders['training'])} images and {epochs} epochs on '{device}'\n")
 
     with active_session():
         model.train()
@@ -163,28 +180,57 @@ def train(device, model, criterion, optimizer, dataloaders):
     print('Training complete!')
     return model, optimizer
 
-def save_checkpoint(model, classifier_struct, image_datasets):
+def save_checkpoint(save_dir, model, classifier_struct, image_datasets, arch):
     # Assumes training is complete and model is ready for inference
     checkpoint = {'classifier': classifier_struct,
                   'class_to_idx': image_datasets['training'].class_to_idx,
                   'model_state_dict': model.state_dict(),
-                  'pretrained_type': 'vgg19'
+                  'pretrained_type': arch
                  }
 
-    torch.save(checkpoint, 'checkpoint.pth')
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        
+    torch.save(checkpoint, f'{save_dir}/checkpoint.pth')
+    print(f'Checkpoint saved to {save_dir}/checkpoint.pth')
     
 def main():
-    #device = torch.device('cuda' if torch.cuda.is_available() and args.gpu else 'cpu')
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('data_directory', action="store")
+    parser.add_argument('--save_dir', default='./', action="store", 
+                        help='Path to which checkpoint of trained model will be saved')
+    parser.add_argument('--arch', default='vgg19', action="store", 
+                        help='Pretrained model architecture. Current valid values are "vgg11" and "vgg19".')
+    parser.add_argument('--learning_rate', action="store",
+                        type=float, default='0.001', 
+                        help='Learning rate for training model')
+    parser.add_argument('--hidden_units', action="store",
+                        type=int, default='1024', 
+                        help='Number of units in hidden layer before output layer')
+    parser.add_argument('--dropout_rate', action="store",
+                        type=float, default='0.2', 
+                        help='Training dropout rate')
+    parser.add_argument('--epochs', action="store",
+                        type=int, default='2', 
+                        help='Training epochs')
+    parser.add_argument('--gpu', action="store_true",
+                        default=False, 
+                        help='Use GPU for training if available. If false or GPU is not available, CPU will be used.')
+
+    args = parser.parse_args()
+          
+    device = torch.device('cuda' if torch.cuda.is_available() and args.gpu else 'cpu')
     
     print('Loading image data...')
-    image_datasets, dataloaders = load_data()
+    image_datasets, dataloaders = load_data(args.data_directory)
     print('Building model...')
-    model, criterion, optimizer, classifier_struct = build_model()
-    print(f'Training model using {device}...')
-    model, optimizer = train(device, model, criterion, optimizer, dataloaders)
+    model, criterion, optimizer, classifier_struct, arch = build_model(args.arch, args.learning_rate, 
+                                                                       args.hidden_units, args.dropout_rate)
+    print(f'Training model...')
+    model, optimizer = train(device, args.epochs, model, criterion, optimizer, dataloaders)
     print('Saving checkpoint...')
-    save_checkpoint(model, classifier_struct, image_datasets)
+    save_checkpoint(args.save_dir, model, classifier_struct, image_datasets, arch)
     print()
     
 if __name__ == '__main__':
