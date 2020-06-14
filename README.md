@@ -63,4 +63,4 @@ optional arguments:
 Usage examples can be found in run_predict.sh
 
 # Notes
-workspace_utils.py is from [https://github.com/udacity/workspaces-student-support]
+workspace_utils.py is from https://github.com/udacity/workspaces-student-support
